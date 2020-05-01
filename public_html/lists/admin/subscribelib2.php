@@ -165,7 +165,62 @@ if (isset($_POST['email']) && !empty($GLOBALS['check_for_host'])) {
 
 $listsok = ((!ALLOW_NON_LIST_SUBSCRIBE && isset($_POST['list']) && is_array($_POST['list'])) || ALLOW_NON_LIST_SUBSCRIBE);
 
-if (isset($_POST['subscribe']) && is_email($_POST['email']) && $listsok && $allthere && $validhost) {
+if (isset($_POST['subscribe']) && is_email($_POST['email']) && $listsok && $allthere && $validhost && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['recaptcha_response'])) {
+    $js_enabled = (isset($_COOKIE['js-enabled']) ? true : false);
+
+    if (empty($_POST['recaptcha_response'])) {
+        // set recaptcha result variable
+        $recaptcha_result = "NA";
+
+        // Log a missing recaptcha token
+        if (defined('RECAPTCHA_LOG') && 1 == RECAPTCHA_LOG) {
+            $log_msg = '"email":"' . $_POST['email'] . '", ';
+            $log_msg .= '"country":"' . $_POST['attribute2'] . '", ';
+            $log_msg .= '"name":"' . $_POST['attribute1'] . '", ';
+            if ($js_enabled === false) {
+                $log_msg .= '"note":"javascript was not enabled", ';
+            } else {
+                $log_msg .= '"note":"recaptcha token missing", ';
+            }
+            logEvent($log_msg);
+        }
+    } else {
+        // Build POST request:
+        $recaptcha_url = 'https://www.google.com/recaptcha/api/siteverify';
+        $recaptcha_secret = RECAPTCHA_SECRET_KEY;
+        $recaptcha_response = $_POST['recaptcha_response'];
+
+        // Make and decode POST request:
+        $recaptcha = file_get_contents($recaptcha_url . '?secret=' . $recaptcha_secret . '&response=' . $recaptcha_response);
+        $recaptcha = json_decode($recaptcha);
+
+        // Judge based on current threshold
+        $recaptcha_result = (($recaptcha->score >= RECAPTCHA_THRESHOLD) ? "pass" : "fail");
+
+        // Log the result
+        if (defined('RECAPTCHA_LOG') && 1 == RECAPTCHA_LOG) {
+            $log_msg = '"email":"' . $_POST['email'] . '", ';
+            $log_msg .= '"country":"' . $_POST['attribute2'] . '", ';
+            $log_msg .= '"name":"' . $_POST['attribute1'] . '", ';
+            $log_msg .= '"threshold":"' . RECAPTCHA_THRESHOLD . '", ';
+            $log_msg .= '"score":"' . $recaptcha->score . '", ';
+            $log_msg .= '"result":"' . $recaptcha_result . '", ';
+            if ($recaptcha_result === "fail" && empty($recaptcha->score)) {
+                $log_msg .= '"note":"possible expired token", ';
+            }
+            logEvent($log_msg);
+        }
+    }
+
+    if ($recaptcha_result !== "pass" && $js_enabled !== true) {
+        $msg = '<div class="error missing"><b>Please enable javascript, reload and try again.</b></div>';
+    } elseif ($recaptcha_result !== "pass") {
+        $msg = '<div class="error missing"><b>Recaptcha failed - Please try again.</b></div>';
+    }
+}
+
+if (isset($_POST['subscribe']) && is_email($_POST['email']) && $listsok && $allthere && $validhost && $recaptcha_result === "pass") {
+
     $history_entry = '';
     // make sure to save the correct data
     if ($subscribepagedata['htmlchoice'] == 'checkfortext' && empty($_POST['textemail'])) {
@@ -694,7 +749,7 @@ if (isset($_POST['subscribe']) && is_email($_POST['email']) && $listsok && $allt
 
 if (isset($_POST['subscribe']) || isset($_POST['update'])) {
     $format = '<div class="error missing">%s</div>'."\n";
-    $msg = '';
+    $msg .= '';
 
     if (!is_email($_POST['email'])) {
         $msg .= sprintf($format, $strEnterEmail);
@@ -930,7 +985,7 @@ function ListAttributes($attributes, $attributedata, $htmlchoice = 0, $userid = 
     if (!isset($_GET['page']) || (isset($_GET['page']) && $_GET['page'] != 'import1')) {
         $html = sprintf('
   <tr><td><div class="required"><label for="email">%s *</label></div></td>
-  <td class="attributeinput"><input type=text name=email required="required" placeholder="%s" size="%d" id="email" />
+  <td class="attributeinput"><input type=text name=email required="required" value="%s" size="%d" id="email" />
   <script language="Javascript" type="text/javascript">addFieldToCheck("email","%s");</script></td></tr>',
             $GLOBALS['strEmail'], htmlspecialchars($email), $textlinewidth, $GLOBALS['strEmail']);
     }

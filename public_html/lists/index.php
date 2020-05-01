@@ -552,6 +552,11 @@ function subscribePage($id)
     list($attributes, $attributedata) = PageAttributes($GLOBALS['pagedata']);
     $selected_lists = explode(',', $GLOBALS['pagedata']['lists']);
     $html = '<title>'.$GLOBALS['strSubscribeTitle'].'</title>';
+    $html .= "\r\n";
+    $html .= '<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>';
+    $html .= "\r\n";
+    $html .= '<script src="https://www.google.com/recaptcha/api.js?render='.RECAPTCHA_SITE_KEY.'"></script>';
+    $html .= "\r\n";
     $html .= $GLOBALS['pagedata']['header'];
     $html .= $GLOBALS['pagedata']['intro'];
     $html .= '
@@ -560,6 +565,7 @@ function subscribePage($id)
 ' .$GLOBALS['msg'].'
 
 <script language="Javascript" type="text/javascript">
+document.cookie = "js-enabled=1; path=/"
 
 function checkform()
 {
@@ -666,6 +672,19 @@ function checkGroup(name,value)
     $html .= ListAttributes($attributes, $attributedata, $GLOBALS['pagedata']['htmlchoice'], 0,
         $GLOBALS['pagedata']['emaildoubleentry']);
     $html .= '</table>';
+
+    $html .= '
+<script type="text/javascript">
+    grecaptcha.ready(function () {
+        grecaptcha.execute("'.RECAPTCHA_SITE_KEY.'", { action: "subscribe" }).then(function (token) {
+            var recaptchaResponse = document.getElementById("recaptchaResponse");
+            recaptchaResponse.value = token;
+        });
+    });
+</script>
+    ';
+
+    $html .= '<input type="hidden" name="recaptcha_response" id="recaptchaResponse">';
 
 //obsolete, moved to rssmanager plugin
 //  if (ENABLE_RSS) { // replaced bij display
